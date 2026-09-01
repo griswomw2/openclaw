@@ -1,6 +1,5 @@
 /** Selects stable runtime executable paths for daemon installs across platforms. */
 import fs from "node:fs/promises";
-import path from "node:path";
 import { isRecord } from "@openclaw/normalization-core/record-coerce";
 import { normalizeLowercaseStringOrEmpty } from "@openclaw/normalization-core/string-coerce";
 import { SUPPORTED_NODE_VERSIONS } from "../../node-version.mjs";
@@ -10,6 +9,7 @@ import { isSqliteWalResetSafeVersion } from "../infra/sqlite-runtime-version.js"
 import { resolveStableNodePath } from "../infra/stable-node-path.js";
 import { getWindowsProgramFilesRoots } from "../infra/windows-install-roots.js";
 import { runExec } from "../process/exec.js";
+import { getPathModule } from "./paths.js";
 import { isBunRuntime } from "./runtime-binary.js";
 
 const VERSION_MANAGER_MARKERS = [
@@ -25,10 +25,6 @@ const VERSION_MANAGER_MARKERS = [
   "/.nodebrew/",
   "/nvs/",
 ];
-
-function getPathModule(platform: NodeJS.Platform) {
-  return platform === "win32" ? path.win32 : path.posix;
-}
 
 function isNodeExecPath(execPath: string, platform: NodeJS.Platform): boolean {
   const pathModule = getPathModule(platform);

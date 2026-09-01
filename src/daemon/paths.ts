@@ -6,6 +6,10 @@ import { resolveGatewayProfileSuffix } from "./constants.js";
 const windowsAbsolutePath = /^[a-zA-Z]:[\\/]/;
 const windowsUncPath = /^\\\\/;
 
+export function getPathModule(platform: NodeJS.Platform) {
+  return platform === "win32" ? path.win32 : path.posix;
+}
+
 /** Resolves the home directory used for daemon state paths. */
 // Daemon unit files must not use infra/home-dir because runtime overrides cannot leak into services.
 export function resolveDaemonHomeDir(env: Record<string, string | undefined>): string {

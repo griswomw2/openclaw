@@ -11,6 +11,7 @@ import { resolveInlineCommandMatch } from "../infra/shell-inline-command.js";
 import { POSIX_SHELL_WRAPPERS } from "../infra/shell-wrapper-resolution.js";
 import { parseTcpPort } from "../infra/tcp-port.js";
 import { resolveLaunchAgentPlistPath } from "./launchd.js";
+import { getPathModule } from "./paths.js";
 import { isBunRuntime, isNodeRuntime } from "./runtime-binary.js";
 import { parseKeyValueOutput } from "./runtime-parse.js";
 import {
@@ -449,10 +450,6 @@ export function readEmbeddedGatewayToken(command: GatewayServiceCommand): string
     return undefined;
   }
   return normalizeOptionalString(command.environment?.OPENCLAW_GATEWAY_TOKEN);
-}
-
-function getPathModule(platform: NodeJS.Platform) {
-  return platform === "win32" ? path.win32 : path.posix;
 }
 
 function getEquivalentMinimalPathEntries(
