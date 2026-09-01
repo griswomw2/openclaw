@@ -72,6 +72,7 @@ async function compileVitestWorkerArtifacts(directory: string): Promise<void> {
     outExtensions: () => ({ js: ".js" }),
     deps: {
       neverBundle: true,
+      // Share fs-safe's policy and native package resolution with source callers.
       alwaysBundle: (id) =>
         (id.startsWith("@openclaw/") || id.startsWith("openclaw/")) &&
         id !== "@openclaw/fs-safe" &&
