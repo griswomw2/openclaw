@@ -661,16 +661,9 @@ export async function assertCodexManagedRequirementsDoNotOverrideToolPolicy(
 }
 
 /** Hashes the exact managed requirements without retaining their hook commands or policy details. */
-export function buildCodexManagedRequirementsFingerprint(requirements: JsonObject | null): string {
-  return crypto
-    .createHash("sha256")
-    .update(
-      fingerprintJsonObject({
-        version: 1,
-        requirements,
-      }),
-    )
-    .digest("hex");
+function buildCodexManagedRequirementsFingerprint(requirements: JsonObject | null): string {
+  const fingerprint = fingerprintJsonObject({ version: 1, requirements });
+  return crypto.createHash("sha256").update(fingerprint).digest("hex");
 }
 
 /** Reads and fingerprints the exact managed requirements active on this app-server. */
