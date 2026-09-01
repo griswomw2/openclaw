@@ -362,9 +362,11 @@ read -r release < "$OPENCLAW_TEST_FETCH_HOLD"
       const ready = new Promise<string>((resolve, reject) => {
         let data = "";
         reader.on("data", (chunk) => {
-          data += chunk;
+          data += chunk.toString();
           const newline = data.indexOf("\n");
-          if (newline >= 0) resolve(data.slice(0, newline));
+          if (newline >= 0) {
+            resolve(data.slice(0, newline));
+          }
         });
         reader.once("error", reject);
       });
@@ -425,7 +427,9 @@ read -r release < "$OPENCLAW_TEST_FETCH_HOLD"
         f.configure({ pauseFetchAt: 0 });
         const retry = f.run("review-checkout-main");
         const retryOwner = f.git(f.canonical, "for-each-ref", "--format=%(objectname)", lockRef);
-        if (retryOwner) recoverFixtureLock(f, retryOwner);
+        if (retryOwner) {
+          recoverFixtureLock(f, retryOwner);
+        }
         expect(retry.status, retry.stdout + retry.stderr).toBe(0);
         expect(initializedTree).toBe(
           fetchNumber === 1 ? undefined : f.git(f.canonical, "rev-parse", `${f.main}^{tree}`),
@@ -435,8 +439,9 @@ read -r release < "$OPENCLAW_TEST_FETCH_HOLD"
         expect(f.git(f.worktree, "status", "--porcelain")).toBe("");
         expect(f.git(f.canonical, "rev-parse", "HEAD")).toBe(f.head);
       } finally {
-        if (controller.exitCode === null && controller.signalCode === null)
+        if (controller.exitCode === null && controller.signalCode === null) {
           controller.kill("SIGTERM");
+        }
         await exited;
         // Unblock a pending FIFO open/read even if the wrapper exited before the handshake.
         const fd = openSync(readyPath, constants.O_RDWR);
@@ -454,10 +459,12 @@ read -r release < "$OPENCLAW_TEST_FETCH_HOLD"
       expect(f.git(f.canonical, "rev-parse", `${f.head}^{tree}`)).toBe(
         f.git(f.canonical, "rev-parse", `${f.sameTreeHead}^{tree}`),
       );
-      if (boundary === "metadata")
+      if (boundary === "metadata") {
         f.configure({ metadata: { ...f.metadata, headRefOid: f.sameTreeHead } });
-      if (boundary === "branch")
+      }
+      if (boundary === "branch") {
         f.configure({ metadata: { ...f.metadata, headRefName: "renamed" } });
+      }
       if (boundary === "fetched") {
         f.git(f.canonical, "push", "origin", `${f.sameTreeHead}:refs/pull/42/head`);
       }
@@ -481,7 +488,9 @@ read -r release < "$OPENCLAW_TEST_FETCH_HOLD"
       // This case owns the nonhosted watcher's post-wait refresh contract.
       writeFileSync(join(f.local, "gates.env"), "GATES_MODE=full\n");
       f.configure({ moveAtCi: true });
-      if (strict) f.env.OPENCLAW_PR_STRICT_DRIFT = "1";
+      if (strict) {
+        f.env.OPENCLAW_PR_STRICT_DRIFT = "1";
+      }
       const before = f.events().length;
       const result = f.run("merge-verify");
       expect(result.status, result.stdout + result.stderr).toBe(strict ? 1 : 0);
@@ -531,8 +540,28 @@ read -r release < "$OPENCLAW_TEST_FETCH_HOLD"
       "/bin/bash",
     );
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain("GitHub CLI auth is not usable");
+    expect(result.stderr).toContain("GitHub API preflight failed");
     expect(f.events().some((e) => e.kind === "main-fetch")).toBe(false);
+  });
+
+  it("stops native merge on viewer quota failure before fetch or dispatch and releases its lock", () => {
+    const f = fixture();
+    f.configure({ viewerRateLimited: true });
+    const result = f.run("merge-run");
+    expect(result.status, result.stdout + result.stderr).toBe(1);
+    expect(result.stderr).toContain("GitHub API preflight rate limited");
+    expect(f.events().some((e) => e.kind === "main-fetch")).toBe(false);
+    const ghCalls = f.events().filter((e) => e.kind === "gh");
+    expect(ghCalls.at(-1)?.args).toEqual([
+      "api",
+      "graphql",
+      "-f",
+      "query=query { viewer { login } }",
+      "--include",
+    ]);
+    expect(ghCalls.some((e) => e.args?.includes("merge"))).toBe(false);
+    expect(f.git(f.origin, "rev-parse", "refs/heads/main")).toBe(f.main);
+    expect(f.git(f.canonical, "for-each-ref", "--format=%(refname)", "refs/openclaw")).toBe("");
   });
 
   for (const bash of ["bash", ...(process.platform === "darwin" ? ["/bin/bash"] : [])]) {

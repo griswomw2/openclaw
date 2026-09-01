@@ -201,6 +201,7 @@ export function createMainRefreshFixture(directory: string) {
     failFetchAt: 0,
     pauseFetchAt: 0,
     failAuth: false,
+    viewerRateLimited: false,
     moveAfterFirstFetch: false,
     moveAtGate: false,
     moveAtChecks: false,
@@ -378,6 +379,11 @@ if (args[0] === 'pr' && args[1] === 'view') {
   if (endpoint === 'graphql') {
     if (control.failAuth) process.exit(1);
     if (args.some(arg => arg.includes('viewer { login }'))) {
+      if (control.viewerRateLimited) {
+        if (args.includes('--include')) process.stdout.write('HTTP/2.0 200 OK\\nX-RateLimit-Resource: graphql\\r\\nX-RateLimit-Remaining: 0\\r\\n\\r\\n');
+        console.log(JSON.stringify({ errors: [{ type: 'RATE_LIMITED', message: 'Synthetic quota failure' }] }));
+        process.exit(1);
+      }
       value = { data: { viewer: { login: 'fixture' } } };
     } else if (args.some(arg => arg.includes('ref(qualifiedName:'))) {
       value = { data: { repository: {
@@ -468,6 +474,7 @@ if (args[0] === 'pr' && args[1] === 'view') {
   throw new Error('Unexpected GitHub command ' + args.join(' '));
 }
 const jqIndex = args.indexOf('--jq');
+if (args.includes('--include')) process.stdout.write('HTTP/2.0 200 OK\\n\\n');
 if (jqIndex >= 0) {
   const result = spawnSync('jq', ['-r', args[jqIndex + 1]], {
     input: JSON.stringify(value),
@@ -524,8 +531,11 @@ if (process.argv[1]?.endsWith('/watch-pr-ci.mts')) {
     metadata,
     configure(update: Partial<typeof control>) {
       Object.assign(control, update);
-      if (control.hostedCi === "scheduled") delete env.NODE_OPTIONS;
-      else env.NODE_OPTIONS = `--import=${clock}`;
+      if (control.hostedCi === "scheduled") {
+        delete env.NODE_OPTIONS;
+      } else {
+        env.NODE_OPTIONS = `--import=${clock}`;
+      }
       writeFileSync(controlFile, JSON.stringify(control));
     },
     events() {

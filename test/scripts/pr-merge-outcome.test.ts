@@ -188,7 +188,7 @@ if(args.some(arg=>arg.includes("{owner}")||arg.includes("{repo}"))) fail("protec
 const main=()=>git(["--git-dir="+process.env.FIXTURE_REMOTE,"rev-parse","refs/heads/main"]);
 if(args[0]==="repo") out(args.includes("--jq")?s.repo.nameWithOwner:s.repo);
 else if(args[0]==="api"&&args.includes("user")) out("relay-reader");
-else if(args.includes("graphql")&&args.includes("query=query { viewer { login } }")) out(s.operator);
+else if(args.includes("graphql")&&args.includes("query=query { viewer { login } }")) out(args.includes("--include") ? "HTTP/2.0 200 OK\\n\\n" + JSON.stringify({data:{viewer:{login:s.operator}}}) : s.operator);
 else if(args[0]==="pr"&&args[1]==="checks") {out([{name:"CI",bucket:s.gates,state:s.gates==="pass"?"SUCCESS":"FAILURE"}]);}
 else if(args[0]==="pr"&&args[1]==="view") {
   const fields=args[args.indexOf("--json")+1].split(",");
@@ -358,7 +358,9 @@ merge_run 123 "\${1:-false}" "\${2:-}"
       cwd: repo,
       encoding: "utf8",
     });
-    if (read.status !== 0) return false;
+    if (read.status !== 0) {
+      return false;
+    }
     const oid = read.stdout.trim();
     const owner = git(["cat-file", "blob", oid]);
     const pgid = Number(/^pgid=(\d+)$/m.exec(owner)?.[1]);
@@ -396,7 +398,7 @@ merge_run 123 "\${1:-false}" "\${2:-}"
   const captures = () =>
     readdirSync(join(worktree, ".local"))
       .filter((name) => /^merge-output(?:\..+)?\.log$/.test(name))
-      .sort()
+      .toSorted()
       .map((name) => [name, readFileSync(join(worktree, ".local", name), "utf8")] as const);
   const setPrivacyProvenance = (rewrite: string | null, access: string | null) => {
     const path = join(worktree, ".local/prep.env");
@@ -605,8 +607,12 @@ describePosix("native merge outcome with real Git and supervised lock recovery",
     const f = fixture();
     const initial = f.state();
     initial.mode = fault === "accepted" ? "pending" : "unapplied";
-    if (fault === "auto-route") initial.pr.mergeStateStatus = "BEHIND";
-    if (fault === "queue-route") initial.pr.isMergeQueueEnabled = true;
+    if (fault === "auto-route") {
+      initial.pr.mergeStateStatus = "BEHIND";
+    }
+    if (fault === "queue-route") {
+      initial.pr.isMergeQueueEnabled = true;
+    }
     if (fault === "admin-route") {
       initial.admin = true;
       initial.gates = "fail";
@@ -625,17 +631,31 @@ describePosix("native merge outcome with real Git and supervised lock recovery",
     next.pr.isInMergeQueue = false;
     next.pr.isMergeQueueEnabled = false;
     next.pr.mergeStateStatus = "CLEAN";
-    if (fault === "review") next.review = false;
-    if (fault === "checks") next.gates = "fail";
-    if (fault === "pending") next.gates = "pending";
-    if (fault === "current-queue") next.pr.isMergeQueueEnabled = true;
+    if (fault === "review") {
+      next.review = false;
+    }
+    if (fault === "checks") {
+      next.gates = "fail";
+    }
+    if (fault === "pending") {
+      next.gates = "pending";
+    }
+    if (fault === "current-queue") {
+      next.pr.isMergeQueueEnabled = true;
+    }
     if (fault === "current-admin") {
       next.admin = true;
       next.gates = "fail";
     }
-    if (fault === "operator") next.operator = "";
-    if (fault === "successor") next.crash = "successor";
-    if (fault === "no-net-change") f.advance("after\n", "stable\n");
+    if (fault === "operator") {
+      next.operator = "";
+    }
+    if (fault === "successor") {
+      next.crash = "successor";
+    }
+    if (fault === "no-net-change") {
+      f.advance("after\n", "stable\n");
+    }
     if (fault === "prepared-head") {
       next.pr.headRefOid = f.base;
       f.git(["-C", f.worktree, "checkout", "--detach", f.base]);
@@ -667,7 +687,9 @@ describePosix("native merge outcome with real Git and supervised lock recovery",
     (exists) => {
       const f = fixture();
       const target = join(f.root, "capture-target");
-      if (exists) writeFileSync(target, "existing capture sentinel\n");
+      if (exists) {
+        writeFileSync(target, "existing capture sentinel\n");
+      }
       f.save({ ...f.state(), crash: "capture" });
       const run = f.run();
       expect(run.status, run.output).toBe(1);
@@ -676,7 +698,9 @@ describePosix("native merge outcome with real Git and supervised lock recovery",
       expect(f.record()).toMatchObject({ phase: "intent", accepted: false });
       expect(run.output).not.toContain("existing capture sentinel");
       expect(existsSync(target)).toBe(exists);
-      if (exists) expect(readFileSync(target, "utf8")).toBe("existing capture sentinel\n");
+      if (exists) {
+        expect(readFileSync(target, "utf8")).toBe("existing capture sentinel\n");
+      }
       f.recover();
       expect(f.run().status).toBe(1);
       expect(f.state().mutations).toBe(0);
@@ -701,7 +725,9 @@ describePosix("native merge outcome with real Git and supervised lock recovery",
       { mergeStateStatus: "BEHIND", admin: false },
       { mergeStateStatus: "DIRTY", admin: false },
       { mergeStateStatus: "DIRTY", admin: true },
-    ].flatMap((entry) => [false, true].map((settles) => ({ ...entry, settles }))),
+    ].flatMap(({ mergeStateStatus, admin }) =>
+      [false, true].map((settles) => ({ mergeStateStatus, admin, settles })),
+    ),
   )(
     "refuses merge before intent when gh would reject: %j",
     ({ mergeStateStatus, admin, settles }) => {
@@ -870,23 +896,29 @@ describePosix("native merge outcome with real Git and supervised lock recovery",
     }
     next.observations = [{ pr: unknownProjection }];
     const persistent = fault.startsWith("persistent ");
-    if (fault === "persistent UNKNOWN mergeable")
+    if (fault === "persistent UNKNOWN mergeable") {
       next.observations = [{ pr: { mergeable: "UNKNOWN", mergeStateStatus: "CLEAN" } }];
-    if (fault === "persistent UNKNOWN status")
+    }
+    if (fault === "persistent UNKNOWN status") {
       next.observations = [{ pr: { mergeable: "MERGEABLE", mergeStateStatus: "UNKNOWN" } }];
+    }
     const projectionDrift =
       fault === "known mergeable reverts" || fault.startsWith("known status ");
-    if (projectionDrift)
+    if (projectionDrift) {
       next.observations.push({
         pr:
           fault === "known mergeable reverts"
             ? { mergeable: "MERGEABLE" }
             : { mergeStateStatus: "CLEAN" },
       });
+    }
     const finalRead = fault.startsWith("final ");
-    if (finalRead)
+    if (finalRead) {
       next.observations.push({ pr: { mergeable: "MERGEABLE", mergeStateStatus: "CLEAN" } });
-    if (!persistent) next.observations.push(step);
+    }
+    if (!persistent) {
+      next.observations.push(step);
+    }
     f.save(next);
     const run = f.run(true);
     expect(run.status, run.output).toBe(1);
@@ -901,14 +933,20 @@ describePosix("native merge outcome with real Git and supervised lock recovery",
     expect(f.git(["--git-dir=" + f.remote, "rev-parse", "topic"])).toBe(f.head);
     expect(f.git(["cat-file", "-t", lockRef])).toBe("blob");
     expect(run.output).toContain("Waiting for GitHub mergeability to settle");
-    if (persistent) expect(run.output).toContain("stopped before intent/dispatch");
-    if (finalRead) expect(run.output).toContain("PR or main changed during observation");
-    if (projectionDrift)
+    if (persistent) {
+      expect(run.output).toContain("stopped before intent/dispatch");
+    }
+    if (finalRead) {
+      expect(run.output).toContain("PR or main changed during observation");
+    }
+    if (projectionDrift) {
       expect(run.output).toContain("PR or main changed while waiting for mergeability");
-    if (fault === "known BLOCKED")
+    }
+    if (fault === "known BLOCKED") {
       expect(run.output).toContain(
         "auto-merge admission requires MERGEABLE with CLEAN or BEHIND status",
       );
+    }
   });
   it.each(["OPEN", "MERGED"])(
     "reconciles retained %s with UNKNOWN projections without admission waiting",
@@ -938,8 +976,11 @@ describePosix("native merge outcome with real Git and supervised lock recovery",
       expect(f.state().observationReads).toBe(2);
       expect(f.captures()).toEqual(capture);
       expect(existsSync(f.worktree)).toBe(true);
-      if (landed) expect(f.record()).toMatchObject({ phase: "merged", landed });
-      else expect(f.git(["rev-parse", outcomeRef])).toBe(before);
+      if (landed) {
+        expect(f.record()).toMatchObject({ phase: "merged", landed });
+      } else {
+        expect(f.git(["rev-parse", outcomeRef])).toBe(before);
+      }
     },
   );
   it.each([false, true])("confirms a real multi-commit rebase with queue=%s", (queue) => {
@@ -1234,12 +1275,24 @@ describePosix("native merge outcome with real Git and supervised lock recovery",
       expect(f.run().status).toBe(1);
       f.recover();
       const next = f.state();
-      if (change === "head") next.pr.headRefOid = f.base;
-      if (change === "base") next.pr.baseRefName = "release";
-      if (change === "closed") next.pr.state = "CLOSED";
-      if (change === "invalid") next.invalid = true;
-      if (change === "unavailable") next.unavailable = true;
-      if (change === "partial") f.advance("partial\n");
+      if (change === "head") {
+        next.pr.headRefOid = f.base;
+      }
+      if (change === "base") {
+        next.pr.baseRefName = "release";
+      }
+      if (change === "closed") {
+        next.pr.state = "CLOSED";
+      }
+      if (change === "invalid") {
+        next.invalid = true;
+      }
+      if (change === "unavailable") {
+        next.unavailable = true;
+      }
+      if (change === "partial") {
+        f.advance("partial\n");
+      }
       if (change === "revert") {
         f.advance();
         f.advance("before\n");
@@ -1264,15 +1317,33 @@ describePosix("native merge outcome with real Git and supervised lock recovery",
   ])("refuses new dispatch on %s", (change) => {
     const f = fixture();
     const next = f.state();
-    if (change === "head") next.pr.headRefOid = f.base;
-    if (change === "base") next.pr.baseRefName = "release";
-    if (change === "closed") next.pr.state = "CLOSED";
-    if (change === "draft") next.pr.isDraft = true;
-    if (change === "invalid") next.invalid = true;
-    if (change === "unavailable") next.unavailable = true;
-    if (change === "drift") next.drift = true;
-    if (change === "conflict") f.advance("conflict\n");
-    if (change === "no-op") f.advance();
+    if (change === "head") {
+      next.pr.headRefOid = f.base;
+    }
+    if (change === "base") {
+      next.pr.baseRefName = "release";
+    }
+    if (change === "closed") {
+      next.pr.state = "CLOSED";
+    }
+    if (change === "draft") {
+      next.pr.isDraft = true;
+    }
+    if (change === "invalid") {
+      next.invalid = true;
+    }
+    if (change === "unavailable") {
+      next.unavailable = true;
+    }
+    if (change === "drift") {
+      next.drift = true;
+    }
+    if (change === "conflict") {
+      f.advance("conflict\n");
+    }
+    if (change === "no-op") {
+      f.advance();
+    }
     if (change === "ancestral-revert") {
       f.git(["push", "-q", "origin", f.head + ":refs/heads/main"]);
       f.advance("before\n");
@@ -1281,8 +1352,9 @@ describePosix("native merge outcome with real Git and supervised lock recovery",
     const run = f.run();
     expect(run.status, run.output).toBe(1);
     expect(f.state().mutations).toBe(0);
-    if (["no-op", "ancestral-revert"].includes(change))
+    if (["no-op", "ancestral-revert"].includes(change)) {
       expect(run.output).toContain("NO NET CHANGE");
+    }
   });
   it.each([
     { auto: false, method: "squash" },
@@ -1426,13 +1498,18 @@ describePosix("native merge outcome with real Git and supervised lock recovery",
     expect(f.run().status).toBe(1);
     f.recover();
     const previous = f.git(["rev-parse", outcomeRef]);
-    if (fault === "corrupt")
+    if (fault === "corrupt") {
       f.git(["update-ref", outcomeRef, f.git(["hash-object", "-w", "--stdin"], "bad")]);
-    if (fault === "symbolic") f.git(["symbolic-ref", outcomeRef, "refs/heads/topic"]);
-    if (fault === "mismatched")
+    }
+    if (fault === "symbolic") {
+      f.git(["symbolic-ref", outcomeRef, "refs/heads/topic"]);
+    }
+    if (fault === "mismatched") {
       f.save({ ...f.state(), repo: { ...f.state().repo, id: "other-repo" } });
-    if (fault === "missing-head")
+    }
+    if (fault === "missing-head") {
       rmSync(join(f.repo, ".git/objects", f.head.slice(0, 2), f.head.slice(2)));
+    }
     if (fault === "missing-parent") {
       const detached = f.commit(f.git(["rev-parse", previous + "^{tree}"]), []);
       f.git(["update-ref", outcomeRef, detached]);
@@ -1464,12 +1541,24 @@ describePosix("native merge outcome with real Git and supervised lock recovery",
     (gate) => {
       const f = fixture();
       const next = f.state();
-      if (gate === "review") next.review = false;
-      if (gate === "ready") next.ready = false;
-      if (gate === "checks") next.gates = "fail";
-      if (gate === "pending") next.gates = "pending";
-      if (gate === "existing-auto") next.pr.autoMergeRequest = { mergeMethod: "MERGE" };
-      if (gate === "auto-ineligible") next.pr.mergeStateStatus = "BLOCKED";
+      if (gate === "review") {
+        next.review = false;
+      }
+      if (gate === "ready") {
+        next.ready = false;
+      }
+      if (gate === "checks") {
+        next.gates = "fail";
+      }
+      if (gate === "pending") {
+        next.gates = "pending";
+      }
+      if (gate === "existing-auto") {
+        next.pr.autoMergeRequest = { mergeMethod: "MERGE" };
+      }
+      if (gate === "auto-ineligible") {
+        next.pr.mergeStateStatus = "BLOCKED";
+      }
       f.save(next);
       const run = f.run(true);
       expect(run.status, run.output).toBe(1);
