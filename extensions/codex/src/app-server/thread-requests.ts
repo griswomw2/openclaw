@@ -590,6 +590,7 @@ export async function assertCodexManagedRequirementsDoNotOverrideToolPolicy(
     restrictedToolSurface: boolean;
     additionalDeniedFeatures?: readonly string[];
     allowedManagedRequirementsFingerprint?: string;
+    allowConfiguredManagedHooks?: boolean;
   },
   signal?: AbortSignal,
 ): Promise<void> {
@@ -610,6 +611,8 @@ export async function assertCodexManagedRequirementsDoNotOverrideToolPolicy(
   const managedRequirementsMatch =
     options.allowedManagedRequirementsFingerprint !== undefined &&
     managedRequirementsFingerprint === options.allowedManagedRequirementsFingerprint;
+  const managedHooksAllowed =
+    managedRequirementsMatch || options.allowConfiguredManagedHooks === true;
   if (options.allowedManagedRequirementsFingerprint !== undefined && !managedRequirementsMatch) {
     throw new Error(
       "Codex managed requirements changed since this automation was authorized; reauthorize the automation from a fresh owner turn",
@@ -627,7 +630,7 @@ export async function assertCodexManagedRequirementsDoNotOverrideToolPolicy(
       if (!isJsonObject(hooks)) {
         throw new Error("Codex configRequirements/read returned invalid managed hooks");
       }
-      if (hasNonEmptyJsonValue(hooks) && !managedRequirementsMatch) {
+      if (hasNonEmptyJsonValue(hooks) && !managedHooksAllowed) {
         throw new Error("Codex restricted tool surface cannot override managed hooks");
       }
     }
@@ -650,7 +653,7 @@ export async function assertCodexManagedRequirementsDoNotOverrideToolPolicy(
         (options.restrictedToolSurface &&
           CODEX_RING_ZERO_RESTRICTED_FEATURES.has(canonicalFeature)) ||
         additionalDeniedFeatures.has(canonicalFeature);
-      if (canonicalFeature === "hooks" && managedRequirementsMatch) {
+      if (canonicalFeature === "hooks" && managedHooksAllowed) {
         continue;
       }
       if (enabled && deniedByToolPolicy) {
